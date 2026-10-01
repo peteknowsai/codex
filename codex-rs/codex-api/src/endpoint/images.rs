@@ -93,16 +93,32 @@ impl<T: HttpTransport> ImagesClient<T> {
             error: ApiError::Stream(format!("failed to encode {operation} request: {e}")),
             imagegen_request_id: None,
         })?;
+        let requested_model = body.get("model").cloned();
+        tracing::info!(
+            target: "codex_image_model_probe",
+            "CODEX_IMAGE_MODEL_PROBE {}",
+            serde_json::json!({"phase": "request", "operation": operation, "requested_model": requested_model})
+        );
         let resp = self
             .session
             .execute(Method::POST, path, extra_headers, Some(body))
             .await
             .map_err(ImageRequestError::from_api_error)?;
         let imagegen_request_id = imagegen_request_id_from_headers(&resp.headers);
-        let response = serde_json::from_slice(&resp.body).map_err(|e| ImageRequestError {
-            error: ApiError::Stream(format!("failed to decode {operation} response: {e}")),
-            imagegen_request_id: imagegen_request_id.clone(),
-        })?;
+        let response: ImageResponse =
+            serde_json::from_slice(&resp.body).map_err(|e| ImageRequestError {
+                error: ApiError::Stream(format!("failed to decode {operation} response: {e}")),
+                imagegen_request_id: imagegen_request_id.clone(),
+            })?;
+        tracing::info!(
+            target: "codex_image_model_probe",
+            "CODEX_IMAGE_MODEL_PROBE {}",
+            serde_json::json!({
+                "phase": "response", "operation": operation,
+                "requested_model": requested_model, "reported_model": response.model,
+                "quality": response.quality, "size": response.size
+            })
+        );
         Ok((response, imagegen_request_id))
     }
 }
@@ -222,6 +238,7 @@ mod tests {
 
     fn expected_response() -> ImageResponse {
         ImageResponse {
+            model: None,
             created: 1778832973,
             background: Some(ImageBackground::Opaque),
             data: vec![ImageData {

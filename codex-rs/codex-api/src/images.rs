@@ -50,6 +50,9 @@ pub enum ImageQuality {
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct ImageResponse {
+    /// Model identity reported by the service, if present. Never inferred from the request.
+    #[serde(default)]
+    pub model: Option<String>,
     pub created: u64,
     pub data: Vec<ImageData>,
     #[serde(default)]
@@ -65,4 +68,27 @@ pub struct ImageData {
     pub b64_json: String,
     #[serde(default)]
     pub generation_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImageResponse;
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+
+    #[test]
+    fn image_response_preserves_reported_model_without_inventing_one() {
+        for model in [
+            None,
+            Some("gpt-image-2.5-flare"),
+            Some("gpt-image-2.5-sunburst"),
+        ] {
+            let mut body = json!({"created": 1, "data": []});
+            if let Some(model) = model {
+                body["model"] = json!(model);
+            }
+            let response: ImageResponse = serde_json::from_value(body).unwrap();
+            assert_eq!(response.model.as_deref(), model);
+        }
+    }
 }
