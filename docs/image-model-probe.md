@@ -29,12 +29,17 @@ From `codex-rs`, using the repository's Rust toolchain:
 ```sh
 CARGO_INCREMENTAL=0 cargo test --locked -p codex-image-generation-extension --lib --profile dev-small -j 4
 CARGO_INCREMENTAL=0 cargo test --locked -p codex-api --lib image --profile dev-small -j 4
-CARGO_INCREMENTAL=0 cargo build --locked -p codex-app-server --bin codex-app-server --profile dev-small -j 4
+CARGO_INCREMENTAL=0 cargo build --locked -p codex-app-server --bin codex-app-server -p codex-code-mode-host --bin codex-code-mode-host --profile dev-small -j 4
 ```
 
 The standalone `target/dev-small/codex-app-server` supports the same stdio
 protocol as `codex app-server`; it does not take an `app-server` subcommand.
 Use it as a separate executable, without replacing the installed Codex.
+Models using code mode also require the sibling `codex-code-mode-host` binary.
+For this experiment, the app-server was built from the fork and the existing
+Codex 0.159.1 code-mode host was symlinked beside it. That host executes the
+agent's JavaScript; native image requests still run in the patched app-server.
+The command above builds both executables if a compatible host is not installed.
 
 ## Evidence
 
@@ -47,3 +52,34 @@ prompt, image, credential, or full response is logged by this probe.
 The optional response model stays absent when the service omits it. Request
 names and response names remain distinct. An echoed response name would still
 be service-reported identity, not independent attestation of model weights.
+
+## Observed result, October 1, 2026
+
+Four live trials used the same simple blue-mug photograph brief through the
+fork's native tool, coordinated by gpt-6-astra with the existing ChatGPT login.
+Each produced one image, one exact requested-model record, and no other tool
+calls. None returned a top-level serving-model identity.
+
+| Requested model | Native image time | Result |
+| --- | ---: | --- |
+| `gpt-image-2` | 25.048 s | Image returned |
+| `gpt-image-2.5-flare` | 31.873 s | Image returned |
+| `gpt-image-2.5-sunburst` | 21.242 s | Image returned |
+| `codex-image-negative-control-not-a-real-model` | 21.589 s | Image returned |
+
+All responses reported `medium` quality and `1254x1254` size. The experiment
+proves that explicit names reach the native request. It does not prove model
+selection: the nonexistent name also succeeded. The service might ignore the
+field or silently fall back. These observations cannot distinguish those
+behaviors or establish that every request used the same serving model.
+
+Validation completed with 184 codex-api tests and 15 image-extension tests
+passing, a successful app-server build, Python harness checks, and all four
+live request-log audits. The new selector tests were first observed failing
+against the original implementation.
+
+Initial attempts failed before image requests because the standalone build
+lacked its sibling code-mode host. Those failures are excluded from the table.
+Successful trials used an isolated Codex home and reused the installed native
+login through an auth-file symlink, removed after the trials. No credentials,
+images, or private configuration are included in this repository.
