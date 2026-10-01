@@ -30,6 +30,89 @@ use crate::artifact::image_generation_output_hint;
 
 const RESULT: &str = "cG5n";
 
+#[tokio::test]
+async fn image_model_selection_applies_to_generation_and_edits() {
+    for model in [
+        None,
+        Some("gpt-image-2.5-flare"),
+        Some("gpt-image-2.5-sunburst"),
+        Some("codex-image-negative-control-not-a-real-model"),
+    ] {
+        for edit in [false, true] {
+            let mut input = serde_json::json!({"prompt": "paint a moonlit lake"});
+            if let Some(model) = model {
+                input["model"] = serde_json::json!(model);
+            }
+            if edit {
+                input["num_last_images_to_include"] = serde_json::json!(1);
+            }
+            let args: ImagegenArgs =
+                serde_json::from_value(input).expect("model selection should parse");
+            let history = [ResponseItem::ImageGenerationCall {
+                id: None,
+                status: "completed".to_string(),
+                revised_prompt: None,
+                result: RESULT.to_string(),
+                internal_chat_message_metadata_passthrough: None,
+            }];
+            let request = request_for_call_args(&args, &history, &[])
+                .await
+                .expect("selected model should build a request");
+            let requested_model = match request {
+                ImageRequest::Generate(request) => {
+                    assert!(!edit);
+                    request.model
+                }
+                ImageRequest::Edit(request) => {
+                    assert!(edit);
+                    request.model
+                }
+            };
+            assert_eq!(requested_model, model.unwrap_or("gpt-image-2"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn image_model_rejects_unsafe_names_before_building_a_request() {
+    for model in ["", "has space", "../model", "model\n", "mödél"]
+        .map(str::to_string)
+        .into_iter()
+        .chain(["x".repeat(129)])
+    {
+        let args: ImagegenArgs = serde_json::from_value(serde_json::json!({
+            "prompt": "paint a moonlit lake",
+            "model": model,
+        }))
+        .expect("model validation occurs before building the request");
+        let error = request_for_call_args(&args, &[], &[])
+            .await
+            .expect_err("invalid model names should fail");
+        assert_eq!(
+            error.to_string(),
+            "`model` must be 1 to 128 ASCII letters, digits, dots, underscores, or hyphens"
+        );
+    }
+}
+
+#[test]
+fn image_model_schema_is_optional() {
+    let ToolSpec::Namespace(spec) = imagegen_tool_spec() else {
+        panic!("imagegen should advertise a namespace tool");
+    };
+    let ResponsesApiNamespaceTool::Function(function) = &spec.tools[0] else {
+        panic!("imagegen should advertise a function tool");
+    };
+    let schema = serde_json::to_value(&function.parameters).expect("schema should serialize");
+    assert!(schema["properties"].get("model").is_some());
+    assert!(
+        !schema["required"]
+            .as_array()
+            .expect("schema should have required fields")
+            .contains(&serde_json::json!("model"))
+    );
+}
+
 #[test]
 fn artifact_path_sanitizes_session_and_call_ids() {
     let save_root = AbsolutePathBuf::current_dir().expect("current directory should be absolute");
@@ -60,6 +143,7 @@ async fn omitted_references_generate_with_fixed_defaults() {
     assert_eq!(
         request_for_call_args(
             &ImagegenArgs {
+                model: None,
                 prompt: "paint a moonlit lake".to_string(),
                 transparent_background: false,
                 referenced_image_paths: None,
@@ -150,6 +234,7 @@ async fn recent_image_fallback_selects_newest_images_in_chronological_order() {
     assert_eq!(
         request_for_call_args(
             &ImagegenArgs {
+                model: None,
                 prompt: "change the lighting".to_string(),
                 transparent_background: false,
                 referenced_image_paths: None,
@@ -171,6 +256,7 @@ async fn recent_image_fallback_selects_newest_images_in_chronological_order() {
 async fn recent_image_fallback_passes_file_backed_image_to_edit_request() {
     let request = request_for_call_args(
         &ImagegenArgs {
+            model: None,
             prompt: "change the lighting".to_string(),
             transparent_background: false,
             referenced_image_paths: None,
@@ -217,6 +303,7 @@ async fn recent_image_fallback_passes_file_backed_image_to_edit_request() {
 async fn recent_image_fallback_passes_file_backed_tool_output_to_edit_request() {
     let request = request_for_call_args(
         &ImagegenArgs {
+            model: None,
             prompt: "change the lighting".to_string(),
             transparent_background: false,
             referenced_image_paths: None,
@@ -271,6 +358,7 @@ async fn recent_image_fallback_passes_file_backed_tool_output_to_edit_request() 
 async fn conflicting_image_selectors_return_tool_error() {
     let error = request_for_call_args(
         &ImagegenArgs {
+            model: None,
             prompt: "change the lighting".to_string(),
             transparent_background: false,
             referenced_image_paths: Some(vec![
@@ -296,6 +384,7 @@ async fn conflicting_image_selectors_return_tool_error() {
 async fn too_many_referenced_image_paths_return_tool_error() {
     let error = request_for_call_args(
         &ImagegenArgs {
+            model: None,
             prompt: "change the lighting".to_string(),
             transparent_background: false,
             referenced_image_paths: Some(
@@ -325,6 +414,7 @@ async fn too_many_referenced_image_paths_return_tool_error() {
 async fn recent_image_fallback_requires_requested_count() {
     let error = request_for_call_args(
         &ImagegenArgs {
+            model: None,
             prompt: "change the lighting".to_string(),
             transparent_background: false,
             referenced_image_paths: None,

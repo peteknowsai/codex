@@ -88,6 +88,9 @@ impl ImageGenerationTool {
 #[serde(deny_unknown_fields)]
 struct ImagegenArgs {
     prompt: String,
+    /// Requested image model. Defaults to gpt-image-2. Experimental alternatives include
+    /// gpt-image-2.5-flare and gpt-image-2.5-sunburst; backend support is not guaranteed.
+    model: Option<String>,
     /// Whether the output should have a transparent background. Defaults to false.
     #[serde(default)]
     transparent_background: bool,
@@ -416,6 +419,18 @@ async fn request_for_call_args(
     history: &[ResponseItem],
     environments: &[ToolEnvironment<'_>],
 ) -> Result<ImageRequest, FunctionCallError> {
+    let model = args.model.as_deref().unwrap_or(IMAGE_MODEL);
+    if model.is_empty()
+        || model.len() > 128
+        || !model
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err(FunctionCallError::RespondToModel(
+            "`model` must be 1 to 128 ASCII letters, digits, dots, underscores, or hyphens"
+                .to_string(),
+        ));
+    }
     let background = if args.transparent_background {
         ImageBackground::Transparent
     } else {
@@ -432,7 +447,7 @@ async fn request_for_call_args(
             return Ok(ImageRequest::Generate(ImageGenerationRequest {
                 prompt: args.prompt.clone(),
                 background: Some(background),
-                model: IMAGE_MODEL.to_string(),
+                model: model.to_string(),
                 n: None,
                 quality: Some(ImageQuality::Auto),
                 size: Some("auto".to_string()),
@@ -476,7 +491,7 @@ async fn request_for_call_args(
         images,
         prompt: args.prompt.clone(),
         background: Some(background),
-        model: IMAGE_MODEL.to_string(),
+        model: model.to_string(),
         n: None,
         quality: Some(ImageQuality::Auto),
         size: Some("auto".to_string()),
