@@ -83,3 +83,30 @@ lacked its sibling code-mode host. Those failures are excluded from the table.
 Successful trials used an isolated Codex home and reused the installed native
 login through an auth-file symlink, removed after the trials. No credentials,
 images, or private configuration are included in this repository.
+
+### Blinded timing and quality follow-up
+
+A further 12 runs compared a text-heavy poster and a three-change precision
+edit. Each requested name ran twice per task, with randomized order within
+four task/repetition blocks. Full image prompts were identical within each
+task. One AI reviewer saw only opaque sample IDs and scored a fixed nine-check
+rubric plus visual polish, without access to model labels or timings.
+
+| Requested name | Poster median | Edit median | Mean checks passed | Mean polish |
+| --- | ---: | ---: | ---: | ---: |
+| Flare | 42.4 s | 30.2 s | 8.25/9 | 4.75/5 |
+| Sunburst | 34.6 s | 25.8 s | 9.00/9 | 5.00/5 |
+| Nonexistent control | 39.0 s | 26.5 s | 9.00/9 | 5.00/5 |
+
+Eleven outputs passed every check. One Flare-requested edit introduced a
+burgundy stripe onto the blue mug body while recoloring the handle. That
+single defect does not establish a model-specific defect rate. The invented
+name scored as well as Sunburst, and timing did not reveal the expected
+faster-Flare/slower-Sunburst ordering.
+
+All twelve trials had one exact native model request, one image call, no other
+tools, and no reported serving model. This small screen did not verify model
+selection. It also cannot establish population equivalence or prove the
+service always ignores the field. Quality scores hit a ceiling on the poster
+task; repeated timing and quality alone cannot attach verified model names
+without known labeled reference distributions.
